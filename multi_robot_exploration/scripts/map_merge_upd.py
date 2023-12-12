@@ -32,7 +32,7 @@ class MapMerge:
 
         print(len(map_merge.data))
 
-        if len(map_merge.data) >= 259584:
+        if len(map_merge.data) >= 323890:
 
             if self.last_grid != 0:
                 for y in range(height):

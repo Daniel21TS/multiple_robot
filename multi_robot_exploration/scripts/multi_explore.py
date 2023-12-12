@@ -72,8 +72,8 @@ class MultiFrontierExploration:
         self.extract_frontiers(msg)
      
         # Transform frontier points into clusters
-        epsilon = 0.2
-        min_samples = 7
+        epsilon = 0.1
+        min_samples = 1
         cluster_points = self.cluster_frontier_points(self.frontier_points, epsilon, min_samples)
 
         # Remove wrong clusters
@@ -99,6 +99,9 @@ class MultiFrontierExploration:
         # Calculate Distance of frontier
         frontier_robot = self.calculate_distance_frontier(frontier_robot)
 
+        # Implement adaptative exploration area
+        frontier_robot = self.calculate_adaptative_exploration_area(frontier_robot)
+
         # Calculate distance travelled
         dist = 0 
         dist = self.calculate_distance_1(self.robot_pose, self.last_robot_pose)
@@ -113,34 +116,40 @@ class MultiFrontierExploration:
         wS=0.8
         frontier_robot = self.calculate_score(frontier_robot,wD,wS)
 
-        print("Frontier " + self.robot_namespace + ":")
+        print("Possible frontiers to explore for " + self.robot_namespace + ":")
         for data in frontier_robot:
             info, dens, distance, middle_point, size, score = data
             print("InfoGain={}, x={}, y={}, dist = {}, densidade = {}, size={}, score={}".format(info, middle_point.point.x , middle_point.point.y, distance, dens, size, score))
 
         # Select best frontier point
-        goal_point = self.select_best_frontier(frontier_robot)
+        goal_point, distance_neg = self.select_best_frontier(frontier_robot)
 
         # Task allocation
-        if self.check_goal_point(goal_point, self.robot_namespace):
+        state =  self.check_goal_point(goal_point, self.robot_namespace, distance_neg)
+        if state == 1:
             # Delete the frontier point where goal point exist  
             frontier_robot = [data for data in frontier_robot if data[2].point.x != goal_point.point.x or data[2].point.y != goal_point.point.y]
+            # Goal point already was choosen and we need to find another one for this robot
+            goal_point, distance_neg = self.select_best_frontier(frontier_robot) 
 
-        goal_point = self.select_best_frontier(frontier_robot)  
+        #elif state == 2:
+            # Delete the frontier of other robot
+
+            # And choose onother one for other robot
+
+
+        # Here we find that the goal point that we choose for the robot is perfect, MOVE ON!
 
         self.initial_entropy = self.calc_entropy(msg)
-        print("Entropy: ")
-        print(self.initial_entropy)
+        print("Entropy: {}".format( self.initial_entropy))
 
         # Send the robot to goal point
         self.send_goal(goal_point)
 
-        print("Goal Point: ")
-        print("x = ",goal_point.point.x)
-        print("y = ",goal_point.point.y)
+        print("Goal Point x = {}  y = {}: ".format( goal_point.point.x, goal_point.point.y))
 
         # Publish robot goal
-        self.publish_goal(goal_point, self.robot_namespace)
+        self.publish_goal(goal_point, self.robot_namespace, distance_neg)
 
 
     def extract_frontiers(self, occupancy_grid):
@@ -238,7 +247,7 @@ class MultiFrontierExploration:
 
             # Compute information gain for each cluster
             num_fp = len(points)
-            if num_fp > 2:
+            if num_fp > 8:
 
                 # Determine the middle point or the point next to the one in the middle
                 middle_index = len(points) // 2
@@ -286,37 +295,36 @@ class MultiFrontierExploration:
             media_fronteiras_vizinhas = tamanho_fronteiras_vizinhas / frontier_density
             densidade_ponderada = density * media_fronteiras_vizinhas / size
             
-            #print(densidade_ponderada)
-            print("Size: ")
-            print(size)
+            #print("Size: ")
+            #print(size)
 
             if map_type == 1:
-                if size <= 3 and densidade_ponderada <= 0.2:
-                    info_gain = 107
+                if size <= 2 and densidade_ponderada <= 0.05:
+                    info_gain = 80
                     table.append((info_gain, densidade_ponderada, middle_point, size))
-                if size > 3 and size <= 6 and densidade_ponderada <= 0.2:
-                    info_gain = 120
+                if size > 2 and size <= 4 and densidade_ponderada <= 0.05:
+                    info_gain = 160
                     table.append((info_gain, densidade_ponderada, middle_point, size))
-                if size > 6 and densidade_ponderada <= 0.2:
-                    info_gain = 128
+                if size > 4 and densidade_ponderada <= 0.05:
+                    info_gain = 166
                     table.append((info_gain, densidade_ponderada, middle_point, size))
-                if size <= 3 and densidade_ponderada > 0.2 and densidade_ponderada <= 0.4:
-                    info_gain = 118
+                if size <= 2 and densidade_ponderada > 0.05 and densidade_ponderada <= 0.1:
+                    info_gain = 160
                     table.append((info_gain, densidade_ponderada, middle_point, size))
-                if size > 3 and size <= 6 and densidade_ponderada > 0.2 and densidade_ponderada <= 0.4:
-                    info_gain = 117
+                if size > 2 and size <= 4 and densidade_ponderada > 0.05 and densidade_ponderada <= 0.1:
+                    info_gain = 235
                     table.append((info_gain, densidade_ponderada, middle_point, size))
-                if size > 6 and densidade_ponderada > 0.2 and densidade_ponderada <= 0.4:
-                    info_gain = 145
+                if size > 4 and densidade_ponderada > 0.05 and densidade_ponderada <= 0.1:
+                    info_gain = 201
                     table.append((info_gain, densidade_ponderada, middle_point, size))
-                if size <= 3 and densidade_ponderada > 0.4:
-                    info_gain = 127
+                if size <= 2 and densidade_ponderada > 0.1:
+                    info_gain = 156
                     table.append((info_gain, densidade_ponderada, middle_point, size))
-                if size > 3 and size <= 6 and densidade_ponderada > 0.4:
-                    info_gain = 180
+                if size > 2 and size <= 4 and densidade_ponderada > 0.1:
+                    info_gain = 182
                     table.append((info_gain, densidade_ponderada, middle_point, size))
-                if size > 6 and densidade_ponderada > 0.4:
-                    info_gain = 135
+                if size > 4 and densidade_ponderada > 0.1:
+                    info_gain = 0
                     table.append((info_gain, densidade_ponderada, middle_point, size))
 
         return table
@@ -401,9 +409,11 @@ class MultiFrontierExploration:
         marker.color.b = 0.0
 
         for points in cluster_points:
-            for point in points:
-                # Add each point as a separate marker
-                marker.points.append(Point(point[0], point[1], 0.0))
+            #print( len(points) )
+            if len(points) > 8:
+                for point in points:
+                    # Add each point as a separate marker
+                    marker.points.append(Point(point[0], point[1], 0.0))
 
         self.marker_publisher.publish(marker)
 
@@ -417,12 +427,13 @@ class MultiFrontierExploration:
             if score > max_score:
                 max_score = score
                 max_middle_point = middle_point
+                max_distance = distance
         
-        return max_middle_point
+        return max_middle_point, max_distance
 
     def calculate_distance_frontier(self, table):
         frontier_robot =[]
-        for infoG, dens, middle_point,size in table:
+        for infoG, dens, middle_point, size in table:
             # Calculate distances to robot's position
             distance_robot = self.calculate_distance(middle_point, self.robot_pose)
             
@@ -432,6 +443,26 @@ class MultiFrontierExploration:
             # Add distance information
             frontier_robot.append(frontier_data)
 
+        return frontier_robot
+    
+    def calculate_adaptative_exploration_area(self, table):
+
+        frontier_robot =[]
+        raio = 5
+
+        while len(frontier_robot) == 0 :
+            for infoG, dens, distance_robot, middle_point, size in table:
+                
+                if distance_robot < raio and infoG > 80:
+                
+                    # Create a tuple or list with size and middle_point
+                    frontier_data = (infoG, dens, distance_robot, middle_point, size)
+
+                    # Add distance information
+                    frontier_robot.append(frontier_data)
+
+            raio = raio + 2
+            
         return frontier_robot
     
     def calculate_score(self, frontier_robot, wD,wS):
@@ -473,6 +504,7 @@ class MultiFrontierExploration:
         robot_id = data.robot_id
         goal_x = data.point.x
         goal_y = data.point.y
+        distance_neg = data.distance_neg
 
         # Check if the robot ID already exists in the robot_goals table
         for i, goal in enumerate(self.robot_goals):
@@ -480,27 +512,49 @@ class MultiFrontierExploration:
                 # Update the existing entry with the new goal point
                 self.robot_goals[i] = (robot_id, goal_x, goal_y)
                 break
-        else:
-            # If the robot ID doesn't exist, append the new goal point
-            self.robot_goals.append((robot_id, goal_x, goal_y))
+            else:
+                # If the robot ID doesn't exist, append the new goal point
+                self.robot_goals.append((robot_id, goal_x, goal_y))
 
         #for goal in self.robot_goals:
         #    print("Robot ID:", goal[0], goal[1], goal[2])
             
         #print("---------------------------------------------------------------------------------")  # Add an empty line between entries
 
-    def check_goal_point(self, goal_point, namespace):
+    def check_goal_point(self, possible_goal_point, namespace, distance_neg): # possible distance
         threshold = 1
+        state = 3
+        # Percorremos os goal point todos
         for goal in self.robot_goals:
-            x_diff = goal[1] - goal_point.point.x
-            y_diff = goal[2] - goal_point.point.y
-            distance = math.sqrt(x_diff**2 + y_diff**2)
+            #Para garantir que analisamos o mesmo goal point
+            x_diff = goal[1] - possible_goal_point.point.x
+            y_diff = goal[2] - possible_goal_point.point.y
+            distance_actual = goal[3]
+            same_goal_check = math.sqrt(x_diff**2 + y_diff**2)
 
-            if goal[0] != namespace and distance <= threshold:
-                return True
-        return False
+            # Se o goal point ja esta atribuido a outro robo
+            if goal[0] != namespace and same_goal_check <= threshold: 
 
-    def publish_goal(self, goal_point, namespace):
+                # Comparamos agora as distancias a que cada um se encontra
+                if distance_neg > distance_actual:
+                    state = 1
+                    # delete goal point do nosso robo
+                    # atribuimos-lhe um novo ponto
+                    # É FEITO NO OUTRO LADO
+                    break
+                else:
+                    state = 2
+                    # o nosso robo fica com este ponto
+                    # fazemos delete ao goal point do outro robo
+                    # atribuimos-lhe outro ponto
+                    break
+                
+            else:
+                state = 0
+
+        return state
+
+    def publish_goal(self, goal_point, namespace, distance):
         # Create a CustomGoal message
         custom_goal = Goal_msg()
         custom_goal.robot_id = namespace
@@ -508,6 +562,9 @@ class MultiFrontierExploration:
         # Assign the Point instance to the custom_goal's goal_point field
         custom_goal.point.x = goal_point.point.x
         custom_goal.point.y = goal_point.point.y
+
+        # Assigne the distance between robot and goal point
+        custom_goal.distance_neg = distance
         
         #print ("Goal Point = {} {}".format(goal_point.point.x,goal_point.point.y))
 

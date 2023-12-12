@@ -204,7 +204,7 @@ define floorplan model
 )
 
 # Set the resolution of the underlying raytrace model in meters
-resolution 0.045
+resolution 0.05
 
 interval_sim 100  # simulation timestep in milliseconds
 
@@ -222,12 +222,12 @@ window
 # load an environment bitmap
 floorplan
 ( 
-  	name "freiburg_079"
+  	name "acc_mexico"
   	size [101.0 53.0 0.50]
   	pose [50.5 26.5 0.0 0.0]
  
   	bitmap "../../maps/building/acc_mexico.png"
-) 
+)  
 
 
 

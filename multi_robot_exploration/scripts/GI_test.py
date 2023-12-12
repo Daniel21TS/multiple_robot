@@ -19,6 +19,7 @@ from geometry_msgs.msg import TransformStamped
 import tf2_geometry_msgs
 import pandas as pd
 import os
+import random
 #from openpyxl import load_workbook
 
 
@@ -58,6 +59,9 @@ class MultiFrontierExploration:
 
         self.goal = None
         self.last_goal_point = None
+
+        self.last_goal_point_1 = 0
+
         self.info_tab = []
 
         self.robot_goals = []  # Dictionary to store the goal points of all robots
@@ -81,12 +85,9 @@ class MultiFrontierExploration:
         self.extract_frontiers(msg)
      
         # Transform frontier points into clusters
-        epsilon = 0.2
-        min_samples = 7
+        epsilon = 0.1
+        min_samples = 1
         cluster_points = self.cluster_frontier_points(self.frontier_points, epsilon, min_samples)
-
-        # Remove wrong clusters
-        #cluster_points = [points for points in cluster_points if math.sqrt((points[-1][0] - points[0][0]) ** 2 + (points[-1][1] - points[0][1]) ** 2) <= 4.5]
    
         # Visualize the clusters
         self.visualize_clusters(msg, cluster_points)
@@ -96,46 +97,53 @@ class MultiFrontierExploration:
         resolution = 0.045
         frontier_robot = self.calculate_frontier_size(cluster_points, resolution)
 
+        # Calculate de density of interest points and choose the respective information gain
+        frontier_robot = self.compute_density(frontier_robot)
+
         # Calculate Distance of frontier
         frontier_robot = self.calculate_distance_frontier(frontier_robot)
 
-        # Calculate distance travelled
-        #dist = 0 
-        #dist = self.calculate_distance_1(self.robot_pose, self.last_robot_pose)
-        #if dist != None:
-        #    self.distance_trav = self.distance_trav + dist
-        #self.last_robot_pose = self.robot_pose
-
-        #print("Distance travelled by robot 1 :", self.distance_trav)
+        # Implement adaptative exploration area
+        frontier_robot = self.calculate_adaptative_exploration_area(frontier_robot)
 
         # Calculate Score with Objective Function
-        wD=0.4
-        wS=0.6
-        frontier_robot = self.calculate_score(frontier_robot,wD,wS)
+        #wD=0.35
+        #wS=0.45
+        #wDen=0.3
+        #frontier_robot = self.calculate_score(frontier_robot,wD,wS,wDen)
 
-        print("Frontier " + self.robot_namespace + ":")
+        print("Possible frontiers for " + self.robot_namespace + ":")
         for data in frontier_robot:
-            size, distance, middle_point, score = data
-            print("size={}, distance={}, x={}, y={}, score={}".format(size, distance, middle_point.point.x , middle_point.point.y, score))
+            size, dens, distance, middle_point = data
+            print("size={}, distance={}, density={}, x={}, y={} ".format(size, distance, dens, middle_point.point.x , middle_point.point.y ))
 
         entropy = self.calc_entropy(msg)
-        print(entropy)
+        print("Actual Entropy = {}".format( entropy))
 
-        # Select best frontier point
-        goal_point = self.select_best_frontier(frontier_robot)
+        check = 0
+        if self.last_goal_point_1 == 0:
+            goal_point = self.select_best_frontier(frontier_robot)
+        else:
+            #check if goal_point exist in frontier_robot
+            for data in frontier_robot:
+                size, dens, distance, middle_point = data
+                if middle_point.point.x == self.last_goal_point_1.point.x:
+                    check = 1
 
-        if abs(self.robot_pose.x - goal_point.point.x) < 4 and abs(self.robot_pose.y - goal_point.point.x) < 4:
-            # Delete the frontier point where goal point exist  
-            frontier_robot = [data for data in frontier_robot if data[2].point.x != goal_point.point.x or data[2].point.y != goal_point.point.y]
-
-            goal_point = self.select_best_frontier(frontier_robot)  
+            if check == 1:
+                goal_point = self.last_goal_point_1
+            else:
+                goal_point = self.select_best_frontier(frontier_robot)
+            
+        check = 0
+        self.last_goal_point_1 = goal_point
 
         # Send the robot to goal point
         self.send_goal(goal_point)
 
 #-----------------------------------------------------------------------------------------------------------
-        print("x = ",goal_point.point.x)
-        print("y = ",goal_point.point.y)
+        print("x goal point = ",goal_point.point.x)
+        print("y goal point = ",goal_point.point.y)
 
         #print("Frontier " + self.robot_namespace + ":")
         #for data in frontier_robot:
@@ -149,26 +157,12 @@ class MultiFrontierExploration:
 
             # Compute frontier size for first goal point
             self.size_last_frontier = 0
+            self.densidade_ponderada = 0
             for data in frontier_robot:
-                size, distance, middle_point, score = data
+                size, dens, distance, middle_point = data
                 if self.last_goal_point.point.x == middle_point.point.x:
                     self.size_last_frontier = size
-
-            # Compute frontierr density for first goal point
-            self.frontier_density = 0
-            area_field_of_view = 65.68
-            self.tamanho_fronteiras_vizinhas = 0
-            for data in frontier_robot:
-                size, distance, middle_point, score = data
-                if abs(self.last_goal_point.point.x - middle_point.point.x) < 5.6 and abs(self.last_goal_point.point.y - middle_point.point.y) < 5.6:
-                    self.frontier_density += 1
-                    self.tamanho_fronteiras_vizinhas += size
-            self.density = self.frontier_density/area_field_of_view
-            self.media_fronteiras_vizinhas = self.tamanho_fronteiras_vizinhas / self.frontier_density
-            self.densidade_ponderada = self.density * self.media_fronteiras_vizinhas / size
-
-            #print(size)
-            #print(self.densidade_ponderada)
+                    self.densidade_ponderada = dens
         
         elif abs(goal_point.point.x - self.last_goal_point.point.x) > 0.5:
 
@@ -182,12 +176,11 @@ class MultiFrontierExploration:
 
             data_zz = (self.last_goal_point, self.size_last_frontier, map_type, norm_info_gain, self.densidade_ponderada)
 
-            #if information_gain > 0.0010:    
-                # Apenas adiciona a fronteira se esta desaparecer das fronteiras
             self.info_tab.append(data_zz)
 
-            print(len(self.info_tab))
+            print("Numero de fronteiras visitadas = {}".format(len(self.info_tab) ))
 
+            #Colocar no ficheiro
             if len((self.info_tab)) >= 50:
                 data = self.info_tab
                 df = pd.DataFrame(data)
@@ -200,24 +193,12 @@ class MultiFrontierExploration:
 
             # Atualiza o size do ultimo goal point
             for data in frontier_robot:
-                size, distance, middle_point, score = data
+                size, dens, distance, middle_point = data
                 if self.last_goal_point.point.x == middle_point.point.x:
                     self.size_last_frontier = size
+                    self.densidade_ponderada = dens
 
-            # Calcula o frontier density do goal point
-            self.frontier_density = 0
-            area_field_of_view = 65.68
-            self.tamanho_fronteiras_vizinhas = 0
-            for data in frontier_robot:
-                size, distance, middle_point, score = data
-                if abs(self.last_goal_point.point.x - middle_point.point.x) < 5.6 and abs(self.last_goal_point.point.y - middle_point.point.y) < 5.6:
-                    self.frontier_density += 1
-                    self.tamanho_fronteiras_vizinhas += size
-            self.density = self.frontier_density/area_field_of_view
-            self.media_fronteiras_vizinhas = self.tamanho_fronteiras_vizinhas / self.frontier_density
-            self.densidade_ponderada = self.density * self.media_fronteiras_vizinhas / size
-
-            print("Info table:")
+            print("tabela de fronteiras visitadas :")
             for data in self.info_tab:
                 last_goal_point, size_last_frontier, map_type, information_gain, frontier_density_ponderada = data
                 print("x={}, y={}, Frontier Size={}, Map Type={}, Norm information Gain={}, Frontier Density Ponderada={}".format(last_goal_point.point.x , last_goal_point.point.y, size_last_frontier, map_type, information_gain, frontier_density_ponderada))        
@@ -364,7 +345,7 @@ class MultiFrontierExploration:
 
             # Compute information gain for each cluster
             num_fp = len(points)
-            if num_fp > 2:
+            if num_fp > 8:
 
                 # Determine the middle point or the point next to the one in the middle
                 middle_index = len(points) // 2
@@ -383,7 +364,7 @@ class MultiFrontierExploration:
 
                 size_frontier = num_fp * resolution
 
-                print(size_frontier)
+                #print(size_frontier)
 
                 table.append((size_frontier, middle_point))
 
@@ -468,54 +449,125 @@ class MultiFrontierExploration:
         marker.color.b = 0.0
 
         for points in cluster_points:
-            for point in points:
-                # Add each point as a separate marker
-                marker.points.append(Point(point[0], point[1], 0.0))
+            #print( len(points) )
+            if len(points) > 8:
+                for point in points:
+                    # Add each point as a separate marker
+                    marker.points.append(Point(point[0], point[1], 0.0))
 
         self.marker_publisher.publish(marker)
 
-    def select_best_frontier(self,frontier_robot):
-        # Send the robot to the bigest frontier
-        max_score = -float('inf')  # Initialize with negative infinity
-        max_middle_point = None
 
-        for data in frontier_robot:
-            size, distance, middle_point, score = data
-            if score > max_score:
-                max_score = score
-                max_middle_point = middle_point
+    #def select_best_frontier(self,frontier_robot):
+        # Send the robot to the bigest frontier
+    #    max_score = -float('inf')  # Initialize with negative infinity
+    #    max_middle_point = None
+
+    #    for data in frontier_robot:
+    #        size, dens, distance, middle_point, score = data
+    #        if score > max_score:
+    #            max_score = score
+    #            max_middle_point = middle_point
         
-        return max_middle_point
+    #    return max_middle_point
+
+    def select_best_frontier(self,frontier_robot):
+
+        # Crie uma lista de pontos médios das fronteiras
+        middle_points = [data[3] for data in frontier_robot]
+
+        # Escolha aleatoriamente um ponto médio das fronteiras
+        random_middle_point = random.choice(middle_points)
+        
+        return random_middle_point
 
     def calculate_distance_frontier(self, table):
         frontier_robot =[]
-        for size, middle_point in table:
+        for size, dens, middle_point in table:
             # Calculate distances to robot's position
             distance_robot = self.calculate_distance(middle_point, self.robot_pose)
             
             # Create a tuple or list with size and middle_point
-            frontier_data = (size, distance_robot, middle_point)
+            frontier_data = (size, dens, distance_robot, middle_point)
 
             # Add distance information
             frontier_robot.append(frontier_data)
 
         return frontier_robot
     
-    def calculate_score(self, frontier_robot, wD,wS):
+    def calculate_adaptative_exploration_area(self, table):
+
+        frontier_robot =[]
+        raio = 5
+
+        # while frontier robot vazia ou fronteiras fracas
+        while len(frontier_robot) == 0 :
+            for size, dens, distance_robot, middle_point in table:
+                
+                if distance_robot < raio and size > 2 and dens > 0.05:
+                
+                    # Create a tuple or list with size and middle_point
+                    frontier_data = (size, dens, distance_robot, middle_point)
+
+                    # Add distance information
+                    frontier_robot.append(frontier_data)
+
+            #if variavel == False
+            #print("Raio de exploraçao: ")
+            #print(raio)
+            raio = raio + 2
+            
+        return frontier_robot
+
+    def compute_density(self, frontier_robot):
+
+        frontier_robot_new =[]
+        frontier_density = 0
+        for data in frontier_robot:
+            size, middle_point = data
+            
+            frontier_density = 0
+            area_field_of_view = 65.68
+            tamanho_fronteiras_vizinhas = 0
+            for data_1 in frontier_robot:
+                size_1, middle_point_1 = data_1
+
+                if abs(middle_point.point.x - middle_point_1.point.x) < 5.6 and abs(middle_point.point.y - middle_point_1.point.y) < 5.6:
+                    frontier_density += 1
+                    tamanho_fronteiras_vizinhas += size_1
+
+
+            density = frontier_density/area_field_of_view
+            media_fronteiras_vizinhas = tamanho_fronteiras_vizinhas / frontier_density
+            densidade_ponderada = density * media_fronteiras_vizinhas / size
+
+            # Create a tuple or list with size and middle_point
+            frontier_data = (size, densidade_ponderada, middle_point)
+
+            # Add distance information
+            frontier_robot_new.append(frontier_data)
+
+        return frontier_robot_new
+    
+    def calculate_score(self, frontier_robot, wD,wS,wDen):
         new_frontier_robot = []
 
         # Extract the values for each parameter
         sizes = [entry[0] for entry in frontier_robot]
-        distances = [entry[1] for entry in frontier_robot]
+        dens = [entry[1] for entry in frontier_robot]
+        distances = [entry[2] for entry in frontier_robot]
 
         # Calculate the mean and standard deviation for each parameter
         mean_size = np.mean(sizes)
         std_size = np.std(sizes)
 
+        mean_dens = np.mean(dens)
+        std_dens = np.std(dens)
+
         mean_distance = np.mean(distances)
         std_distance = np.std(distances)
 
-        for size, distance, middle_point in frontier_robot:
+        for size, dens, distance, middle_point in frontier_robot:
 
             # Calculate normalized values
   
@@ -530,8 +582,13 @@ class MultiFrontierExploration:
             else:
                 normalized_distance = (distance - mean_distance) / std_distance
 
-            score = wS*normalized_size - wD*normalized_distance
-            new_frontier_robot.append((size, distance, middle_point, score))
+            if std_dens == 0:
+                normalized_dens = 1
+            else:
+                normalized_dens = (dens - mean_dens) / std_dens
+
+            score = wS*normalized_size + wDen*normalized_dens - wD*normalized_distance
+            new_frontier_robot.append((size, dens, distance, middle_point, score))
 
         frontier_robot = new_frontier_robot
 

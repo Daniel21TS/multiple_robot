@@ -1,10 +1,10 @@
-include "freiburg_079.inc"
+include "csail.inc"
 
 pioneer
 (		  
   	# Can refer to the robot by this name
   	name "pioneer0"
-  	pose [ 10.0 8.0 0.0 0.0 ]
+  	pose [ 5.0 8.0 0.0 0.0 ]
 	color "blue"
 )
 

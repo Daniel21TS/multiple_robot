@@ -33,7 +33,7 @@
     </include>
 
     <!--Explore Node -->
-    <node pkg="multi_robot_exploration" type="multi_explore.py" name="explore" output="screen">
+    <node pkg="multi_robot_exploration" type="GI_test.py" name="explore" output="screen">
       <param name="robot_namespace" value="$(arg prefix)"/>
     </node>
     
@@ -60,10 +60,10 @@
       <arg name="init_pose_yaw" value="$(arg init_pose_yaw)"/>
     </include> 
 
-    <!--Explore Node -->
+    <!--Explore Node  
     <node pkg="multi_robot_exploration" type="multi_explore.py" name="explore" output="screen">
       <param name="robot_namespace" value="$(arg prefix)"/>
-    </node> 
+    </node>   -->
 
   </group>
 
@@ -85,7 +85,7 @@
   <node pkg="multi_robot_exploration" type="map_merge_upd.py" name="map_merge_upd" output="screen"/>
   
   <!--Transformada para colocar /robot_0/cmap e map sobrepostos-->
-  <node pkg="tf" type="static_transform_publisher" name="static_tf_map_to_map_merged" args="-18.5 -7.0 0.0 0.0 0.0 0.0 map_merged map 10"  /> 
+  <node pkg="tf" type="static_transform_publisher" name="static_tf_map_to_map_merged" args="-12.0 -16.5 0.0 0.0 0.0 0.0 map_merged map 10"  /> 
   <!-- -18.5+5.0=-13.5 -10.5+5.0=-5.5 half of the initial map size + 2*offset -> check in gmapping_navigation.launch -->
 
   <node type="rviz" name="rviz" pkg="rviz" args="-d $(find multi_robot_exploration)/rviz/multi_robot.rviz" />
