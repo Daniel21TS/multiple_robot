@@ -72,8 +72,8 @@ class MultiFrontierExploration:
         self.extract_frontiers(msg)
      
         # Transform frontier points into clusters
-        epsilon = 0.5
-        min_samples = 5
+        epsilon = 1
+        min_samples = 8
         cluster_points = self.cluster_frontier_points(self.frontier_points, epsilon, min_samples)
 
         # Visualize the clusters
@@ -104,8 +104,8 @@ class MultiFrontierExploration:
         print("Distance travelled by " + self.robot_namespace + " :", self.distance_trav)
 
         # Calculate Score with Objective Function
-        wD=0.3
-        wS=0.7
+        wD=0.25
+        wS=0.75
         frontier_robot = self.calculate_score(frontier_robot,wD,wS)
 
         print("Possible frontiers to explore for " + self.robot_namespace + ":")
@@ -118,9 +118,10 @@ class MultiFrontierExploration:
 
         # Task allocation
         state =  self.check_goal_point(goal_point, self.robot_namespace, distance_neg)
-        if state == 1:
+        if state == 0:
+            print("Errei, o ponto fica melhor a outro robo")
             # Delete the frontier point where goal point exist  
-            frontier_robot = [data for data in frontier_robot if data[2].point.x != goal_point.point.x or data[2].point.y != goal_point.point.y]
+            frontier_robot = [data for data in frontier_robot if data[3].point.x != goal_point.point.x or data[3].point.y != goal_point.point.y]
             # Goal point already was choosen and we need to find another one for this robot
             goal_point, distance_neg = self.select_best_frontier(frontier_robot) 
 
@@ -280,9 +281,6 @@ class MultiFrontierExploration:
             density = frontier_density/area_field_of_view
             media_fronteiras_vizinhas = tamanho_fronteiras_vizinhas / frontier_density
             densidade_ponderada = density * media_fronteiras_vizinhas / size
-            
-            #print("Size: ")
-            #print(size)
 
             if map_type == 1:
                 if size <= 1 and densidade_ponderada <= 0.05:
@@ -419,7 +417,6 @@ class MultiFrontierExploration:
         marker.color.b = 0.0
 
         for points in cluster_points:
-            #print( len(points) )
             if len(points) > 8:
                 for point in points:
                     # Add each point as a separate marker
@@ -429,8 +426,11 @@ class MultiFrontierExploration:
 
     def select_best_frontier(self,frontier_robot):
         # Send the robot to the bigest frontier
-        max_score = -float('inf')  # Initialize with negative infinity
-        max_middle_point = None
+        first_data = frontier_robot[0]
+
+        max_score = first_data[5]
+        max_middle_point = first_data[3]
+        max_distance = first_data[2]
 
         for data in frontier_robot:
             info, dens, distance, middle_point, size, score = data
@@ -530,14 +530,9 @@ class MultiFrontierExploration:
                 # If the robot ID doesn't exist, append the new goal point
                 self.robot_goals.append((robot_id, goal_x, goal_y))
 
-        #for goal in self.robot_goals:
-        #    print("Robot ID:", goal[0], goal[1], goal[2])
-            
-        #print("---------------------------------------------------------------------------------")  # Add an empty line between entries
-
     def check_goal_point(self, possible_goal_point, namespace, distance_neg): # possible distance
         threshold = 1
-        state = 3
+        state = 0
         # Percorremos os goal point todos
         for goal in self.robot_goals:
             #Para garantir que analisamos o mesmo goal point
@@ -550,21 +545,8 @@ class MultiFrontierExploration:
             if goal[0] != namespace and same_goal_check <= threshold: 
 
                 # Comparamos agora as distancias a que cada um se encontra
-                if distance_neg > distance_actual:
+                if distance_neg < distance_actual:
                     state = 1
-                    # delete goal point do nosso robo
-                    # atribuimos-lhe um novo ponto
-                    # É FEITO NO OUTRO LADO
-                    break
-                else:
-                    state = 2
-                    # o nosso robo fica com este ponto
-                    # fazemos delete ao goal point do outro robo
-                    # atribuimos-lhe outro ponto
-                    break
-                
-            else:
-                state = 0
 
         return state
 
@@ -579,8 +561,6 @@ class MultiFrontierExploration:
 
         # Assigne the distance between robot and goal point
         custom_goal.distance_neg = distance
-        
-        #print ("Goal Point = {} {}".format(goal_point.point.x,goal_point.point.y))
 
         # Publish the goal message
         self.goal_publisher.publish(custom_goal)
