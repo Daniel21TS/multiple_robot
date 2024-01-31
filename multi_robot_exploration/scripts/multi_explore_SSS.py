@@ -72,7 +72,7 @@ class MultiFrontierExploration:
         self.extract_frontiers(msg)
      
         # Transform frontier points into clusters
-        epsilon = 1
+        epsilon = 0.5
         min_samples = 8
         cluster_points = self.cluster_frontier_points(self.frontier_points, epsilon, min_samples)
 
@@ -91,9 +91,6 @@ class MultiFrontierExploration:
         # Calculate Distance of frontier
         frontier_robot = self.calculate_distance_frontier(frontier_robot)
 
-        # Implement adaptative exploration area
-        frontier_robot = self.calculate_adaptative_exploration_area(frontier_robot)
-
         # Calculate distance travelled
         dist = 0 
         dist = self.calculate_distance_1(self.robot_pose, self.last_robot_pose)
@@ -103,7 +100,10 @@ class MultiFrontierExploration:
 
         print("Distance travelled by " + self.robot_namespace + " :", self.distance_trav)
 
-        # Calculate Score with Objective Function
+        # Implement adaptative exploration area
+        frontier_robot = self.calculate_adaptative_exploration_area(frontier_robot)
+
+        # Calculate Score with Objective Function1
         wD=0.25
         wS=0.75
         frontier_robot = self.calculate_score(frontier_robot,wD,wS)
@@ -119,7 +119,7 @@ class MultiFrontierExploration:
         # Task allocation
         state =  self.check_goal_point(goal_point, self.robot_namespace, distance_neg)
         if state == 0:
-            print("Errei, o ponto fica melhor a outro robo")
+            #print("Errei, o ponto fica melhor a outro robo")
             # Delete the frontier point where goal point exist  
             frontier_robot = [data for data in frontier_robot if data[3].point.x != goal_point.point.x or data[3].point.y != goal_point.point.y]
             # Goal point already was choosen and we need to find another one for this robot
@@ -462,7 +462,7 @@ class MultiFrontierExploration:
         raio = 5
     
         # Enquanto o robo nao tiver fronteiras na regiao
-        while len(frontier_robot) == 0 :
+        while len(frontier_robot) < 4 :
             for infoG, dens, distance_robot, middle_point, size in table:
                 
                 # Se a distancia do ponto fronteira é menor que o raio, incluimos a fronteira nesta regiao
@@ -476,6 +476,7 @@ class MultiFrontierExploration:
                     frontier_robot.append(frontier_data)
 
             raio = raio + 2
+            print("AUMENTEI O RAIO E AGORA E : %d",raio)
             
         return frontier_robot
     
@@ -484,29 +485,30 @@ class MultiFrontierExploration:
 
         # Extract the values for each parameter
         infoGains = [entry[0] for entry in frontier_robot]
-        distances = [entry[1] for entry in frontier_robot]
+        distances = [entry[2] for entry in frontier_robot]
 
-        # Calculate the mean and standard deviation for each parameter
-        mean_info = np.mean(infoGains)
-        std_info = np.std(infoGains)
+        min_info = np.min(infoGains)
+        max_info = np.max(infoGains)
 
-        mean_distance = np.mean(distances)
-        std_distance = np.std(distances)
+        min_distance = np.min(distances)
+        max_distance = np.max(distances)
+
+        #print(min_info)
+        #print(max_info)
+        #print(min_distance)
+        #print(max_distance)
 
         for info, dens, distance, middle_point, size in frontier_robot:
 
-            if std_info == 0:
-                normalized_info = 1
+            normalized_info = (info - min_info) / ( max_info - min_info )
+            
+            normalized_distance = (distance - min_distance) / ( max_distance - min_distance )
 
-            else:
-                normalized_info = (info - mean_info) / std_info
-
-            if std_distance == 0:
-                normalized_distance = 1
-            else:
-                normalized_distance = (distance - mean_distance) / std_distance
+            #print("Normalized information gain %f",normalized_info)
+            #print("Normalized distance %f",normalized_distance)
 
             score = wS*normalized_info - wD*normalized_distance
+
             new_frontier_robot.append((info, dens, distance, middle_point, size, score))
 
         frontier_robot = new_frontier_robot
